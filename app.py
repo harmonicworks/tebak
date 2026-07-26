@@ -210,6 +210,7 @@ class TransportBar(Widget):
     position: reactive[int] = reactive(0)
     playing: reactive[bool] = reactive(False)
     tempo: reactive[float] = reactive(120.0)
+    in_port: reactive[str] = reactive("")
     out_port: reactive[str] = reactive("")
 
     def render(self) -> RenderableType:
@@ -233,8 +234,14 @@ class TransportBar(Widget):
         t.append(f"  {self._elapsed_str()}", style="#888888")
 
         t.append("\n")
-        port_label = self.out_port if self.out_port else "포트 없음"
-        t.append(f"  MIDI → {port_label}", style="#444444")
+        if self.in_port or self.out_port:
+            in_label = self.in_port or "없음"
+            out_label = self.out_port or "없음"
+            t.append(f"  IN: {in_label}", style="#446688")
+            t.append("   OUT: ", style="#444444")
+            t.append(out_label, style="#446688")
+        else:
+            t.append("  ⚠  MIDI 장치 없음 — 연결 후 재시작 (no MIDI device found)", style="bold #884444")
         t.append("   ")
         t.append("SPACE 재생/정지  E 꺼내기  R 녹음  ←→ 커서  ↑↓ 음표  [ ] 템포  S 저장  O 불러오기  Q 종료",
                  style="#333333")
@@ -318,7 +325,6 @@ class TebakApp(App):
         self._record_pos = 0
         self._file_mode: str = ""   # "save" or "load"
         self._cursors = [0, 0, 0, 0]
-        self._out_port = ""
 
     # ------------------------------------------------------------ compose
 
@@ -339,12 +345,13 @@ class TebakApp(App):
         self.seq.on_step = lambda s: self.call_from_thread(self._on_seq_step, s)
         self.seq.on_note = lambda ti, n, ch: self.midi.play_note(ch, n)
 
-        self._out_port = self.midi.open_output()
-        self.midi.open_input()
+        out_port = self.midi.open_output()
+        in_port = self.midi.open_input()
         self.midi.on_note_in = lambda n, v: self.call_from_thread(self._on_midi_note, n, v)
 
         transport = self.query_one("#transport", TransportBar)
-        transport.out_port = self._out_port
+        transport.out_port = out_port
+        transport.in_port = in_port
         transport.tempo = self.seq.tempo
 
         self.set_interval(1 / 12, self._tick_reel)

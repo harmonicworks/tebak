@@ -28,33 +28,19 @@ class MidiIO:
         return mido.get_input_names()
 
     def open_output(self, name: Optional[str] = None) -> str:
-        # Virtual port appears automatically in any DAW / MIDI app — no IAC needed
-        try:
-            self._out = mido.open_output("Tebak", virtual=True)
-            return "Tebak (virtual)"
-        except Exception:
-            pass
-        # Fall back to first available hardware port
+        """Connect to a real hardware MIDI output port."""
         names = mido.get_output_names()
         if not names:
-            return "없음"
+            return ""
         target = name if (name and name in names) else names[0]
         try:
             self._out = mido.open_output(target)
             return target
         except Exception:
-            return "없음"
+            return ""
 
     def open_input(self, name: Optional[str] = None) -> str:
-        # Virtual input so a MIDI keyboard can connect without extra setup
-        try:
-            self._in = mido.open_input("Tebak Input", virtual=True)
-            self._running = True
-            threading.Thread(target=self._listen, daemon=True).start()
-            return "Tebak Input (virtual)"
-        except Exception:
-            pass
-        # Fall back to first available hardware port
+        """Connect to a real hardware MIDI input port."""
         names = mido.get_input_names()
         if not names:
             return ""
