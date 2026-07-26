@@ -195,9 +195,8 @@ class ReelWidget(Widget):
 
 
 class TransportBar(Widget):
-    DEFAULT_CSS = "TransportBar { height: 4; }"
+    DEFAULT_CSS = "TransportBar { height: 3; }"
 
-    position: reactive[int]   = reactive(0)
     playing:  reactive[bool]  = reactive(False)
     tempo:    reactive[float] = reactive(120.0)
     in_port:  reactive[str]   = reactive("")
@@ -206,66 +205,53 @@ class TransportBar(Widget):
     def render(self) -> RenderableType:
         t = Text()
 
-        # button row
-        t.append("\n")
+        # row 1: transport buttons + key hints
         if self.playing:
             t.append(" ▶ PLAY ", style="bold black on #44dd44")
             t.append("  ")
-            t.append(" ■ STOP ", style="#777777")
+            t.append(" ■ STOP ", style="#666666")
         else:
-            t.append(" ▶ PLAY ", style="#777777")
+            t.append(" ▶ PLAY ", style="#666666")
             t.append("  ")
             t.append(" ■ STOP ", style="bold black on #dddddd")
         t.append("   ")
-        t.append(" ⏏  EJECT ", style="#aaaaaa")
+        t.append(" ⏏ EJECT ", style="#999999")
         t.append("     ")
         self._hint(t, "SPACE", "play   ")
         self._hint(t, "E",     "eject   ")
-        self._hint(t, "R",     "rec (needs MIDI kbd)   ")
+        self._hint(t, "R",     "rec*   ")
         self._hint(t, "1-4/TAB", "track   ")
-        self._hint(t, "M",     "MIDI ports")
+        self._hint(t, "M",     "MIDI")
 
-        # scrubber + hint row
+        # row 2: editing hints
         t.append("\n ")
-        bar_w  = 36
-        pos    = max(0, min(15, self.position))
-        filled = round((pos / 15) * bar_w)
-        t.append("▕", style="#555555")
-        t.append("─" * filled,           style="#d08020")
-        t.append("▐",                    style="bold #ffdd55")
-        t.append("─" * (bar_w - filled), style="#383838")
-        t.append("▏", style="#555555")
-        t.append(f"  {self._elapsed()}   ", style="#aaaaaa")
         self._hint(t, "← →",  "cursor   ")
         self._hint(t, "ENTER", "toggle   ")
-        self._hint(t, "↑↓",   "pitch   ")
+        self._hint(t, "↑ ↓",  "pitch   ")
         self._hint(t, "⇧↑↓",  "octave   ")
         self._hint(t, "[ ]",  "tempo   ")
-        self._hint(t, "S/O",  "save/load   ")
+        self._hint(t, "S / O", "save/load   ")
         self._hint(t, "Q",    "quit")
+        t.append("        ")
+        t.append("BPM: ", style="#777777")
+        t.append(f"{self.tempo:.0f}", style="bold #e8a020")
+        t.append("   * rec needs MIDI keyboard", style="#555555")
 
-        # MIDI port row
+        # row 3: MIDI ports
         t.append("\n ")
         if self.in_port or self.out_port:
-            t.append("MIDI  IN: ",           style="#777777")
-            t.append(self.in_port  or "없음", style="#55aacc")
-            t.append("   OUT: ",             style="#777777")
-            t.append(self.out_port or "없음", style="#55aacc")
+            t.append("IN: ",              style="#666666")
+            t.append(self.in_port or "—", style="#55aacc")
+            t.append("   OUT: ",          style="#666666")
+            t.append(self.out_port or "—",style="#55aacc")
         else:
-            t.append("⚠  MIDI 장치 없음 — connect a device and restart  (M to pick device)",
-                     style="#cc6666")
+            t.append("⚠ no MIDI device found — press M to select", style="#cc6666")
         return t
 
     @staticmethod
     def _hint(t: Text, key: str, label: str) -> None:
-        t.append(key,   style="bold #e8a020")
-        t.append(f" {label}", style="#888888")
-
-    def _elapsed(self) -> str:
-        sps   = 60.0 / max(1.0, self.tempo) / 4.0
-        total = self.position * sps
-        m, s  = divmod(int(total), 60)
-        return f"{m}:{s:02d}"
+        t.append(key,          style="bold #e8a020")
+        t.append(f" {label}",  style="#888888")
 
 
 # ---------------------------------------------------------------------------
@@ -444,8 +430,8 @@ class TebakApp(App):
         Binding("2",           "select_track_1",    "",          show=False),
         Binding("3",           "select_track_2",    "",          show=False),
         Binding("4",           "select_track_3",    "",          show=False),
-        Binding("bracketleft", "tempo_down",        "",          show=False),
-        Binding("bracketright","tempo_up",           "",          show=False),
+        Binding("[",           "tempo_down",        "",          show=False),
+        Binding("]",           "tempo_up",          "",          show=False),
         Binding("comma",       "nudge_back",        "",          show=False),
         Binding("period",      "nudge_forward",     "",          show=False),
         Binding("delete",      "clear_step",        "",          show=False),
@@ -477,7 +463,7 @@ class TebakApp(App):
             yield ReelWidget(id="reel")
         yield TransportBar(id="transport")
 
-    # ---------------------------------------------------------------- mount
+    # ---------------------------------------------------------------- mount / resize
 
     def on_mount(self) -> None:
         self.seq.on_step = lambda s: self.call_from_thread(self._on_seq_step, s)
@@ -494,6 +480,18 @@ class TebakApp(App):
 
         self.set_interval(1 / 12, self._tick_reel)
 
+    def on_resize(self, event) -> None:
+        # Hide the reel when the screen is too narrow; tracks always stay full width
+        reel = self.query_one("#reel", ReelWidget)
+        reel.display = event.size.width >= 100
+
+    def on_key(self, event) -> None:
+        # Extra fallback for [ ] in case Textual's binding name varies by terminal
+        if event.key in ("[", "left_square_bracket"):
+            self.action_tempo_down()
+        elif event.key in ("]", "right_square_bracket"):
+            self.action_tempo_up()
+
     # ---------------------------------------------------------------- sequencer callbacks
 
     def _on_seq_step(self, step: int) -> None:
@@ -504,7 +502,6 @@ class TebakApp(App):
                 row.flash = step
                 self.set_timer(0.06, lambda r=row: setattr(r, "flash", -1))
         self.query_one("#status-bar", StatusBar).position = step
-        self.query_one("#transport",  TransportBar).position = step
 
     def _tick_reel(self) -> None:
         reel = self.query_one("#reel", ReelWidget)
@@ -581,8 +578,7 @@ class TebakApp(App):
         self.query_one("#status-bar", StatusBar).record = False
         self.seq.eject()
         tp = self.query_one("#transport", TransportBar)
-        tp.playing  = False
-        tp.position = 0
+        tp.playing = False
         for i in range(4):
             self.query_one(f"#track-{i}", TrackRow).playhead = -1
         self._update_status("정지")

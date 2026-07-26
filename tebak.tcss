@@ -35,16 +35,16 @@ TrackRow {
 }
 
 #reel {
-    width: 24;
+    width: 26;
     background: #111111;
     border-left: solid #333333;
-    padding: 2 1;
+    padding: 1 1;
     align: center middle;
     color: #d08020;
 }
 
 #transport {
-    height: 4;
+    height: 3;
     background: #111111;
     border-top: solid #333333;
     color: #aaaaaa;
