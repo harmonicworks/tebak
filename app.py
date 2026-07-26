@@ -80,25 +80,30 @@ REEL_FRAMES = _build_reel_frames()
 # ---------------------------------------------------------------------------
 
 class StatusBar(Widget):
-    """Top bar: name · tempo · position · status."""
+    """Top bar: name · tempo · position · status · rec."""
 
     DEFAULT_CSS = "StatusBar { height: 1; }"
 
     tempo: reactive[float] = reactive(120.0)
     position: reactive[int] = reactive(0)
     status: reactive[str] = reactive("정지")
+    record: reactive[bool] = reactive(False)
 
     def render(self) -> RenderableType:
         t = Text(no_wrap=True, overflow="ellipsis")
         t.append(" 테박 ", style="bold #e8a020 on #0d0d0d")
-        t.append("  ┃  ", style="#333333")
+        t.append("  ┃  ", style="#555555")
         t.append(f" 박자: {self.tempo:.0f} BPM ", style="#e8a020")
-        t.append("  ┃  ", style="#333333")
+        t.append("  ┃  ", style="#555555")
         pos = f"{self.position + 1:02d} / 16"
         t.append(f" 위치: {pos} ", style="#4a9eff")
-        t.append("  ┃  ", style="#333333")
-        color = "#44dd44" if self.status == "재생중" else ("#ff4444" if "녹음" in self.status else "#888888")
-        t.append(f" {self.status} ", style=f"bold {color}")
+        t.append("  ┃  ", style="#555555")
+        if self.record:
+            t.append(" ● REC ", style="bold white on #aa0000")
+            t.append("  MIDI 키보드로 음표 입력 — SPACE 쉼표  ← 되돌리기  R 종료 ", style="#ff6666")
+        else:
+            color = "#44dd44" if self.status == "재생중" else "#aaaaaa"
+            t.append(f" {self.status} ", style=f"bold {color}")
         return t
 
 
@@ -203,9 +208,9 @@ class ReelWidget(Widget):
 
 
 class TransportBar(Widget):
-    """Bottom bar: play / stop / eject + position scrubber."""
+    """Bottom bar: transport buttons + scrubber + key hints."""
 
-    DEFAULT_CSS = "TransportBar { height: 3; }"
+    DEFAULT_CSS = "TransportBar { height: 4; }"
 
     position: reactive[int] = reactive(0)
     playing: reactive[bool] = reactive(False)
@@ -215,36 +220,65 @@ class TransportBar(Widget):
 
     def render(self) -> RenderableType:
         t = Text()
-        play_s = "bold #44dd44" if self.playing else "#444444"
-        stop_s = "#888888" if self.playing else "bold #cccccc"
 
+        # ---- button row ----
         t.append("\n")
-        t.append("  [ ▶ 재생 ]", style=play_s)
-        t.append("   [ ■ 정지 ]", style=stop_s)
-        t.append("   [ ⏏  꺼내기 ]", style="#888888")
-        t.append("      ", style="")
-
-        # scrubber
-        bar_w = 32
-        filled = round((self.position / 15) * bar_w)
-        t.append("─" * filled, style="#c87010")
-        t.append("●", style="bold #ffdd55")
-        t.append("─" * (bar_w - filled), style="#333333")
-
-        t.append(f"  {self._elapsed_str()}", style="#888888")
-
-        t.append("\n")
-        if self.in_port or self.out_port:
-            in_label = self.in_port or "없음"
-            out_label = self.out_port or "없음"
-            t.append(f"  IN: {in_label}", style="#446688")
-            t.append("   OUT: ", style="#444444")
-            t.append(out_label, style="#446688")
+        if self.playing:
+            t.append(" ▶ PLAY ", style="bold black on #44dd44")
+            t.append("  ", style="")
+            t.append(" ■ STOP ", style="#666666")
         else:
-            t.append("  ⚠  MIDI 장치 없음 — 연결 후 재시작 (no MIDI device found)", style="bold #884444")
-        t.append("   ")
-        t.append("SPACE 재생/정지  E 꺼내기  R 녹음  ←→ 커서  ↑↓ 음표  [ ] 템포  S 저장  O 불러오기  Q 종료",
-                 style="#333333")
+            t.append(" ▶ PLAY ", style="#666666")
+            t.append("  ", style="")
+            t.append(" ■ STOP ", style="bold black on #cccccc")
+        t.append("  ", style="")
+        t.append(" ⏏  EJECT ", style="#888888")
+        t.append("   → ", style="#444444")
+        t.append("SPACE", style="bold #e8a020")
+        t.append(" to play/stop   ", style="#666666")
+        t.append("E", style="bold #e8a020")
+        t.append(" eject   ", style="#666666")
+        t.append("R", style="bold #e8a020")
+        t.append(" record on selected track   ", style="#666666")
+        t.append("TAB / 1-4", style="bold #e8a020")
+        t.append(" select track", style="#666666")
+
+        # ---- scrubber row ----
+        t.append("\n ")
+        bar_w = 40
+        pos = max(0, min(15, self.position))
+        filled = round((pos / 15) * bar_w)
+        t.append("▕", style="#333333")
+        t.append("─" * filled, style="#c87010")
+        t.append("▐", style="bold #ffdd55")
+        t.append("─" * (bar_w - filled), style="#2a2a2a")
+        t.append("▏", style="#333333")
+        t.append(f"  {self._elapsed_str()}", style="#888888")
+        t.append("   ", style="")
+        t.append("← →", style="bold #e8a020")
+        t.append(" cursor   ", style="#666666")
+        t.append("ENTER", style="bold #e8a020")
+        t.append(" toggle step   ", style="#666666")
+        t.append("↑ ↓", style="bold #e8a020")
+        t.append(" pitch   ", style="#666666")
+        t.append("[ ]", style="bold #e8a020")
+        t.append(" tempo   ", style="#666666")
+        t.append("S", style="bold #e8a020")
+        t.append(" save   ", style="#666666")
+        t.append("O", style="bold #e8a020")
+        t.append(" load   ", style="#666666")
+        t.append("Q", style="bold #e8a020")
+        t.append(" quit", style="#666666")
+
+        # ---- MIDI port row ----
+        t.append("\n ")
+        if self.in_port or self.out_port:
+            t.append("MIDI  IN: ", style="#555555")
+            t.append(self.in_port or "없음", style="#4488aa")
+            t.append("   OUT: ", style="#555555")
+            t.append(self.out_port or "없음", style="#4488aa")
+        else:
+            t.append("⚠  MIDI 장치 없음 — connect a device and restart", style="#884444")
 
         return t
 
@@ -394,6 +428,7 @@ class TebakApp(App):
         if self._record_pos >= 16:
             self._record_mode = False
             self._record_pos = 0
+            self.query_one("#status-bar", StatusBar).record = False
             self._update_status("정지")
         else:
             self._cursors[self._selected_track] = self._record_pos
@@ -419,6 +454,7 @@ class TebakApp(App):
 
     def action_eject(self) -> None:
         self._record_mode = False
+        self.query_one("#status-bar", StatusBar).record = False
         self.seq.eject()
         tp = self.query_one("#transport", TransportBar)
         tp.playing = False
@@ -431,6 +467,8 @@ class TebakApp(App):
         if self.seq.playing:
             return
         self._record_mode = not self._record_mode
+        sb = self.query_one("#status-bar", StatusBar)
+        sb.record = self._record_mode
         if self._record_mode:
             self._record_pos = self._cursors[self._selected_track]
             self._update_status(f"녹음 {self._record_pos + 1}/16")
