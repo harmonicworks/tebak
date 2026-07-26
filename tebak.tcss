@@ -1,0 +1,77 @@
+/* 테박 — Textual CSS */
+
+Screen {
+    background: #0d0d0d;
+    color: #cccccc;
+    layers: base overlay;
+}
+
+#status-bar {
+    height: 1;
+    background: #0a0a0a;
+    color: #888888;
+    border-bottom: solid #222222;
+    layer: base;
+}
+
+#main-container {
+    height: 1fr;
+    background: #111111;
+    layer: base;
+}
+
+#tracks-container {
+    width: 1fr;
+    padding: 1 2;
+    layout: vertical;
+    background: #111111;
+}
+
+TrackRow {
+    height: 4;
+    margin-bottom: 1;
+    background: #111111;
+    color: #cccccc;
+}
+
+#reel {
+    width: 24;
+    background: #0a0a0a;
+    border-left: solid #222222;
+    padding: 2 1;
+    align: center middle;
+    color: #c87010;
+}
+
+#transport {
+    height: 3;
+    background: #0a0a0a;
+    border-top: solid #222222;
+    color: #666666;
+    layer: base;
+}
+
+FileInput {
+    layer: overlay;
+    align: center middle;
+    width: 64;
+    height: 7;
+    background: #1a1a1a;
+    border: solid #555555;
+    padding: 1 2;
+}
+
+#file-prompt {
+    color: #e8a020;
+    margin-bottom: 1;
+}
+
+Input {
+    background: #0d0d0d;
+    border: solid #444444;
+    color: #cccccc;
+}
+
+Input:focus {
+    border: solid #e8a020;
+}
