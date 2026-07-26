@@ -1,7 +1,6 @@
 """테박 — terminal MIDI step sequencer."""
 from __future__ import annotations
 
-import math
 import os
 from typing import List, Optional
 
@@ -19,46 +18,61 @@ from midi_io import MidiIO
 from sequencer import Sequencer, note_name
 
 # ---------------------------------------------------------------------------
-# Reel animation  (pre-generated frames)
+# Reel animation — hand-crafted tape reel frames (4 × 45° rotation steps)
+# Each frame: 21 chars wide, 9 lines tall
+# ▒▒ = tape pack, (◐◓◑◒) = spinning hub, spokes rotate each frame
 # ---------------------------------------------------------------------------
 
-def _build_reel_frames(num_frames: int = 24, w: int = 19, h: int = 11) -> List[List[str]]:
-    cx, cy = w // 2, h // 2
-    r_outer = min(cx - 1, cy - 1)
-    r_spoke = r_outer - 2
-    spoke_chars = {0: "─", 1: "╱", 2: "│", 3: "╲"}
-
-    def angle_char(rad: float) -> str:
-        a = rad % math.pi
-        return spoke_chars[round(a / (math.pi / 4)) % 4]
-
-    frames: List[List[str]] = []
-    for f in range(num_frames):
-        base_angle = f * (2 * math.pi / num_frames)
-        grid = [[" "] * w for _ in range(h)]
-        for deg in range(0, 360, 5):
-            rad = math.radians(deg)
-            x = cx + round((r_outer - 0.5) * math.cos(rad) * 0.55)
-            y = cy + round((r_outer - 0.5) * math.sin(rad))
-            if 0 <= x < w and 0 <= y < h:
-                grid[y][x] = "·"
-        for s in range(3):
-            angle = base_angle + s * (2 * math.pi / 3)
-            ch = angle_char(angle)
-            for step in range(1, r_spoke + 1):
-                x = cx + round(step * math.cos(angle) * 0.55)
-                y = cy + round(step * math.sin(angle))
-                if 0 <= x < w and 0 <= y < h and (x, y) != (cx, cy):
-                    grid[y][x] = ch
-        hub_ch = "◐◓◑◒"[f % 4]
-        grid[cy][cx] = hub_ch
-        for corner in [(0, 0), (0, -1), (-1, 0), (-1, -1)]:
-            grid[corner[0]][corner[1]] = " "
-        frames.append(["".join(row) for row in grid])
-    return frames
-
-
-REEL_FRAMES = _build_reel_frames()
+REEL_FRAMES = [
+    # Frame 0: spokes │ (vertical) + hints of diagonals
+    [
+        "   ╭─────────────────╮   ",
+        "  ╱  ▒▒▒▒▒▒▒▒▒▒▒▒▒  ╲  ",
+        " │  ▒▒  · ╲ │ ╱ · ▒▒  │ ",
+        " │  ▒▒  ·  ╲│╱  · ▒▒  │ ",
+        " │  ▒▒ ────(◐)──── ▒▒  │ ",
+        " │  ▒▒  ·  ╱│╲  · ▒▒  │ ",
+        " │  ▒▒  · ╱ │ ╲ · ▒▒  │ ",
+        "  ╲  ▒▒▒▒▒▒▒▒▒▒▒▒▒  ╱  ",
+        "   ╰─────────────────╯   ",
+    ],
+    # Frame 1: spokes ╲╱ (diagonal)
+    [
+        "   ╭─────────────────╮   ",
+        "  ╱  ▒▒▒▒▒▒▒▒▒▒▒▒▒  ╲  ",
+        " │  ▒▒  ╲ · · · ╱ ▒▒  │ ",
+        " │  ▒▒  · ╲ · ╱ · ▒▒  │ ",
+        " │  ▒▒ ────(◓)──── ▒▒  │ ",
+        " │  ▒▒  · ╱ · ╲ · ▒▒  │ ",
+        " │  ▒▒  ╱ · · · ╲ ▒▒  │ ",
+        "  ╲  ▒▒▒▒▒▒▒▒▒▒▒▒▒  ╱  ",
+        "   ╰─────────────────╯   ",
+    ],
+    # Frame 2: spokes ─ (horizontal) + hints of diagonals
+    [
+        "   ╭─────────────────╮   ",
+        "  ╱  ▒▒▒▒▒▒▒▒▒▒▒▒▒  ╲  ",
+        " │  ▒▒  · ╱ · ╲ · ▒▒  │ ",
+        " │  ▒▒  ─ ─ · ─ ─ ▒▒  │ ",
+        " │  ▒▒ ────(◑)──── ▒▒  │ ",
+        " │  ▒▒  ─ ─ · ─ ─ ▒▒  │ ",
+        " │  ▒▒  · ╲ · ╱ · ▒▒  │ ",
+        "  ╲  ▒▒▒▒▒▒▒▒▒▒▒▒▒  ╱  ",
+        "   ╰─────────────────╯   ",
+    ],
+    # Frame 3: spokes ╱╲ (other diagonal)
+    [
+        "   ╭─────────────────╮   ",
+        "  ╱  ▒▒▒▒▒▒▒▒▒▒▒▒▒  ╲  ",
+        " │  ▒▒  ╱ · · · ╲ ▒▒  │ ",
+        " │  ▒▒  · ╱ · ╲ · ▒▒  │ ",
+        " │  ▒▒ ────(◒)──── ▒▒  │ ",
+        " │  ▒▒  · ╲ · ╱ · ▒▒  │ ",
+        " │  ▒▒  ╲ · · · ╱ ▒▒  │ ",
+        "  ╲  ▒▒▒▒▒▒▒▒▒▒▒▒▒  ╱  ",
+        "   ╰─────────────────╯   ",
+    ],
+]
 
 
 # ---------------------------------------------------------------------------
@@ -83,8 +97,8 @@ class StatusBar(Widget):
         t.append("  ┃  ", style="#666666")
         if self.record:
             t.append(" ● REC ", style="bold white on #cc0000")
-            t.append("  MIDI 키보드로 입력 — SPACE 쉼표   ← 되돌리기   R 종료 ",
-                     style="#ff7777")
+            t.append("  Play MIDI keyboard to fill steps — SPACE rest   ← erase   R stop ",
+                     style="#ff8888")
         else:
             color = "#44ee44" if self.status == "재생중" else "#bbbbbb"
             t.append(f" {self.status} ", style=f"bold {color}")
@@ -115,11 +129,11 @@ class TrackRow(Widget):
         t.append(f"{header:<14}", style="#cccccc" if foc else "#999999")
         t.append("┃ ", style="#666666")
 
-        # step blocks
+        # step blocks — 4 chars each (██ + 2 spaces) so note names align
         for i, step in enumerate(trk.steps):
-            on_cursor   = foc and (i == cur)
-            on_head     = i == ph
-            just_fired  = i == self.flash
+            on_cursor  = foc and (i == cur)
+            on_head    = i == ph
+            just_fired = i == self.flash
 
             if step.active:
                 if just_fired or (on_head and step.active):
@@ -135,29 +149,29 @@ class TrackRow(Widget):
                     t.append("░░", style="#666666")
                 else:
                     t.append("░░", style="#444444")
-            t.append(" ")
+            t.append("  ")  # 2 spaces → 4-char column
 
         t.append("\n")
 
-        # note strip
+        # note strip — 4 chars each, aligned with blocks above
         t.append(" " * 14)
         t.append("  ")
         for i, step in enumerate(trk.steps):
             on_cursor = foc and (i == cur)
             if step.active:
                 nm = note_name(step.note)
-                t.append(f"{nm:<3}", style="bold #55ccff" if on_cursor else "#3399dd")
+                t.append(f"{nm:<4}", style="bold #55ccff" if on_cursor else "#3399dd")
             elif on_cursor:
-                t.append("─ ─", style="#555555")
+                t.append("─── ", style="#555555")
             else:
-                t.append("   ")
+                t.append("    ")
 
         t.append("\n")
 
         # separator
         t.append("─" * 14, style="#333333")
         t.append("┸─", style="#444444")
-        t.append("─" * (16 * 3), style="#2a2a2a")
+        t.append("─" * (16 * 4), style="#2a2a2a")
 
         return t
 
@@ -205,30 +219,30 @@ class TransportBar(Widget):
         t.append("   ")
         t.append(" ⏏  EJECT ", style="#aaaaaa")
         t.append("     ")
-        self._hint(t, "SPACE", "play/stop   ")
+        self._hint(t, "SPACE", "play   ")
         self._hint(t, "E",     "eject   ")
-        self._hint(t, "R",     "record   ")
-        self._hint(t, "TAB/1-4", "track   ")
-        self._hint(t, "M",     "MIDI device")
+        self._hint(t, "R",     "rec (needs MIDI kbd)   ")
+        self._hint(t, "1-4/TAB", "track   ")
+        self._hint(t, "M",     "MIDI ports")
 
-        # scrubber row
+        # scrubber + hint row
         t.append("\n ")
-        bar_w  = 40
+        bar_w  = 36
         pos    = max(0, min(15, self.position))
         filled = round((pos / 15) * bar_w)
         t.append("▕", style="#555555")
-        t.append("─" * filled,        style="#d08020")
-        t.append("▐",                 style="bold #ffdd55")
+        t.append("─" * filled,           style="#d08020")
+        t.append("▐",                    style="bold #ffdd55")
         t.append("─" * (bar_w - filled), style="#383838")
         t.append("▏", style="#555555")
         t.append(f"  {self._elapsed()}   ", style="#aaaaaa")
-        self._hint(t, "← →",   "cursor   ")
-        self._hint(t, "ENTER",  "toggle step   ")
-        self._hint(t, "↑ ↓",   "pitch   ")
-        self._hint(t, "[ ]",   "tempo   ")
-        self._hint(t, "S",     "save   ")
-        self._hint(t, "O",     "load   ")
-        self._hint(t, "Q",     "quit")
+        self._hint(t, "← →",  "cursor   ")
+        self._hint(t, "ENTER", "toggle   ")
+        self._hint(t, "↑↓",   "pitch   ")
+        self._hint(t, "⇧↑↓",  "octave   ")
+        self._hint(t, "[ ]",  "tempo   ")
+        self._hint(t, "S/O",  "save/load   ")
+        self._hint(t, "Q",    "quit")
 
         # MIDI port row
         t.append("\n ")
@@ -422,6 +436,8 @@ class TebakApp(App):
         Binding("down",        "note_down",         "",          show=False),
         Binding("shift+up",    "note_up_octave",    "",          show=False),
         Binding("shift+down",  "note_down_octave",  "",          show=False),
+        Binding("ctrl+up",     "note_up_octave",    "",          show=False),
+        Binding("ctrl+down",   "note_down_octave",  "",          show=False),
         Binding("enter",       "toggle_step",       "",          show=False),
         Binding("tab",         "next_track",        "",          show=False),
         Binding("1",           "select_track_0",    "",          show=False),
